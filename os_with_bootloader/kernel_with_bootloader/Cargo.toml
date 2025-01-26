@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 bootloader_api = "0.11" # Replace with the appropriate version
 x86_64 = "0.14.0"         # Replace with the appropriate version
+noto-sans-mono-bitmap = "0.2" 
