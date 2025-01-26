@@ -1,10 +1,9 @@
 #![no_std]
 #![no_main]
 
-mod writers;  // This will include the writers folder as a module
+mod writers; // This will include the writers folder as a module
 
-use writers::writer::FrameBufferWriter;  // Access FrameBufferWriter from the writers module
-use writers::constants::font_constants;    // Access constants from the constants.rs file
+use writers::writer::FrameBufferWriter; // Access FrameBufferWriter from the writers module
 use bootloader_api::config::Mapping;
 use x86_64::instructions::hlt;
 use core::fmt::Write; // Required for `writeln!`
@@ -29,8 +28,23 @@ fn my_entry_point(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
     // Initialize the framebuffer writer
     let mut frame_buffer_writer = FrameBufferWriter::new(buffer, frame_buffer_info);
 
-    // Test writing to the framebuffer
-    writeln!(frame_buffer_writer, "Testing testing {} and {}", 1, 4.0 / 2.0).unwrap();
+    // Test: Write a simple message
+    writeln!(frame_buffer_writer, "Hello, world!").unwrap();
+
+    // Test: Write a long line to check row wrapping
+    writeln!(
+        frame_buffer_writer,
+        "This is a very long line that should wrap to the next line automatically."
+    )
+    .unwrap();
+
+    // Test: Write multiple lines to trigger screen scrolling
+    for i in 0..50 {
+        writeln!(frame_buffer_writer, "This is line number {}", i).unwrap();
+    }
+
+    // Test: Write a single character after scrolling
+    frame_buffer_writer.write_char('A');
 
     // Enter an infinite loop to halt the CPU
     loop {

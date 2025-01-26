@@ -33,7 +33,6 @@ pub struct FrameBufferWriter {
     x_pos: usize,
     y_pos: usize,
 }
-
 impl FrameBufferWriter {
     /// Creates a new logger that uses the given framebuffer.
     pub fn new(framebuffer: &'static mut [u8], info: FrameBufferInfo) -> Self {
@@ -47,15 +46,64 @@ impl FrameBufferWriter {
         logger
     }
 
+    /// Validates the cursor position and resets it if it's out of bounds.
+    fn validate_cursor(&mut self) {
+        if self.x_pos >= self.width() || self.y_pos >= self.height() {
+            self.reset_cursor();
+        }
+    }
+
+    /// Resets the cursor to the top-left corner.
+    fn reset_cursor(&mut self) {
+        self.x_pos = BORDER_PADDING;
+        self.y_pos = BORDER_PADDING;
+    }
+
     /// Moves to the next line and resets the x position.
     fn newline(&mut self) {
-        self.y_pos += CHAR_RASTER_HEIGHT.val() + LINE_SPACING;
+        let line_height = CHAR_RASTER_HEIGHT.val() + LINE_SPACING;
+    
+        // Check if the next line exceeds the screen height
+        if self.y_pos + line_height >= self.height() {
+            self.scroll_screen(); // Scroll the screen if needed
+        } else {
+            self.y_pos += line_height; // Move to the next line
+        }
         self.carriage_return();
     }
+    
+    
 
     /// Resets the x position to the border padding.
     fn carriage_return(&mut self) {
         self.x_pos = BORDER_PADDING;
+    }
+
+    /// Scrolls the screen upward by one row and clears the last row.
+    fn scroll_screen(&mut self) {
+        let row_height = CHAR_RASTER_HEIGHT.val() + LINE_SPACING;
+        let screen_height = self.height();
+        let stride = self.info.stride;
+
+        // Move rows up by one line
+        for y in row_height..screen_height {
+            for x in 0..self.width() {
+                let src_offset = (y * stride) + x;
+                let dest_offset = ((y - row_height) * stride) + x;
+                self.framebuffer[dest_offset] = self.framebuffer[src_offset];
+            }
+        }
+
+        // Clear the last row
+        for y in (screen_height - row_height)..screen_height {
+            for x in 0..self.width() {
+                let offset = (y * stride) + x;
+                self.framebuffer[offset] = 0; // Set to black or background color
+            }
+        }
+
+        // Adjust cursor position
+        self.y_pos -= row_height;
     }
 
     /// Erases all text on the screen and resets the cursor position.
@@ -88,11 +136,13 @@ impl FrameBufferWriter {
                 let new_ypos = self.y_pos + CHAR_RASTER_HEIGHT.val() + BORDER_PADDING;
                 if new_ypos >= self.height() {
                     self.clear();
+                    self.carriage_return(); // Reset to the top-left corner after clearing
                 }
                 self.write_rendered_char(get_char_raster(c));
             }
         }
     }
+    
 
     /// Prints a rendered character into the framebuffer and updates the x position.
     fn write_rendered_char(&mut self, rendered_char: RasterizedChar) {
