@@ -1,5 +1,3 @@
-
-
 use core::{
     fmt::{self, Write},
     ptr,
@@ -32,7 +30,9 @@ pub struct FrameBufferWriter {
     info: FrameBufferInfo,
     x_pos: usize,
     y_pos: usize,
+    color: u8, // Default text color
 }
+
 impl FrameBufferWriter {
     /// Creates a new logger that uses the given framebuffer.
     pub fn new(framebuffer: &'static mut [u8], info: FrameBufferInfo) -> Self {
@@ -41,28 +41,31 @@ impl FrameBufferWriter {
             info,
             x_pos: 0,
             y_pos: 0,
+            color: 0x0F, // Default white on black
         };
         logger.clear();
         logger
     }
 
-    /// Validates the cursor position and resets it if it's out of bounds.
-    fn validate_cursor(&mut self) {
-        if self.x_pos >= self.width() || self.y_pos >= self.height() {
-            self.reset_cursor();
+    /// Dynamically set the cursor position
+    pub fn set_cursor(&mut self, x: isize, y: isize) -> Result<(), &'static str> {
+        if x < 0 || y < 0 || x as usize >= self.width() || y as usize >= self.height() {
+            return Err("Invalid cursor position");
         }
+        self.x_pos = x as usize;
+        self.y_pos = y as usize;
+        Ok(())
     }
 
-    /// Resets the cursor to the top-left corner.
-    fn reset_cursor(&mut self) {
-        self.x_pos = BORDER_PADDING;
-        self.y_pos = BORDER_PADDING;
+    /// Change text color dynamically
+    pub fn set_color(&mut self, color: u8) {
+        self.color = color;
     }
 
     /// Moves to the next line and resets the x position.
     fn newline(&mut self) {
         let line_height = CHAR_RASTER_HEIGHT.val() + LINE_SPACING;
-    
+
         // Check if the next line exceeds the screen height
         if self.y_pos + line_height >= self.height() {
             self.scroll_screen(); // Scroll the screen if needed
@@ -71,8 +74,6 @@ impl FrameBufferWriter {
         }
         self.carriage_return();
     }
-    
-    
 
     /// Resets the x position to the border padding.
     fn carriage_return(&mut self) {
@@ -127,7 +128,16 @@ impl FrameBufferWriter {
     fn write_char(&mut self, c: char) {
         match c {
             '\n' => self.newline(),
-            '\r' => self.carriage_return(),
+            '\t' => {
+                // Tab (4 spaces)
+                let tab_size = 4 * font_constants::CHAR_RASTER_WIDTH;
+                self.x_pos += tab_size;
+
+                // Wrap if exceeding screen width
+                if self.x_pos >= self.width() {
+                    self.newline();
+                }
+            }
             c => {
                 let new_xpos = self.x_pos + font_constants::CHAR_RASTER_WIDTH;
                 if new_xpos >= self.width() {
@@ -135,14 +145,12 @@ impl FrameBufferWriter {
                 }
                 let new_ypos = self.y_pos + CHAR_RASTER_HEIGHT.val() + BORDER_PADDING;
                 if new_ypos >= self.height() {
-                    self.clear();
-                    self.carriage_return(); // Reset to the top-left corner after clearing
+                    self.scroll_screen();
                 }
                 self.write_rendered_char(get_char_raster(c));
             }
         }
     }
-    
 
     /// Prints a rendered character into the framebuffer and updates the x position.
     fn write_rendered_char(&mut self, rendered_char: RasterizedChar) {
